@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Sklepik szkolny</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      background-color: #f2f2f2;
+    }
+    .hidden { display: none; }
+    .login-container, .admin-panel, .worker-panel {
+      background: white;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+      max-width: 500px;
+      margin: 0 auto;
+    }
+    h1, h2 { text-align: center; }
+    input, select, button {
+      display: block;
+      width: 100%;
+      padding: 10px;
+      margin: 10px 0;
+    }
+    ul { list-style: none; padding: 0; }
+    li { margin: 5px 0; }
+  </style>
+</head>
+<body>
+
+<div class="login-container" id="loginContainer">
+  <h1>Logowanie</h1>
+  <input type="text" id="login" placeholder="Login">
+  <input type="password" id="password" placeholder="Hasło">
+  <button onclick="zaloguj()">Zaloguj</button>
+  <p id="loginError" style="color:red;"></p>
+</div>
+
+<div class="admin-panel hidden" id="adminPanel">
+  <h1>Panel administratora</h1>
+  <h2>Dodaj produkt</h2>
+  <input type="text" id="nazwaProduktu" placeholder="Nazwa produktu">
+  <input type="number" id="cenaProduktu" placeholder="Cena">
+  <button onclick="dodajProdukt()">Dodaj</button>
+  <h2>Lista produktów</h2>
+  <ul id="listaProduktow"></ul>
+</div>
+
+<div class="worker-panel hidden" id="workerPanel">
+  <h1>Panel pracownika</h1>
+  <h2>Sprzedaż</h2>
+  <label for="dataSprzedazy">Data sprzedaży:</label>
+  <input type="datetime-local" id="dataSprzedazy">
+  <div id="produktyCheckboxes"></div>
+  <button onclick="zapiszSprzedaz()">Zapisz sprzedaż</button>
+  <h3>Filtruj sprzedaż po dacie</h3>
+  <input type="date" id="filtrData" onchange="pokazSprzedaz()">
+  <h3>Podsumowanie sprzedaży</h3>
+  <ul id="listaSprzedazy"></ul>
+  <p><strong>Łączna kwota: <span id="lacznaKwota">0.00</span> zł</strong></p>
+</div>
+
+<script>
+  const produktyKey = 'produkty';
+  const sprzedazKey = 'sprzedaz';
+
+  function zaloguj() {
+    const login = document.getElementById('login').value;
+    const password = document.getElementById('password').value;
+    const loginError = document.getElementById('loginError');
+    if (login === 'admin' && password === 'admin123') {
+      document.getElementById('loginContainer').classList.add('hidden');
+      document.getElementById('adminPanel').classList.remove('hidden');
+      pokazListeProduktow();
+    } else if (login === 'pracownik' && password === 'pracownik123') {
+      document.getElementById('loginContainer').classList.add('hidden');
+      document.getElementById('workerPanel').classList.remove('hidden');
+      ustawDateIGodzine();
+      pokazCheckboxyProduktow();
+      pokazSprzedaz();
+    } else {
+      loginError.textContent = 'Nieprawidłowy login lub hasło';
+    }
+  }
+
+  function dodajProdukt() {
+    const nazwa = document.getElementById('nazwaProduktu').value;
+    const cena = parseFloat(document.getElementById('cenaProduktu').value);
+    if (!nazwa || isNaN(cena)) {
+      alert('Wpisz poprawną nazwę i cenę!');
+      return;
+    }
+    const produkty = JSON.parse(localStorage.getItem(produktyKey)) || [];
+    produkty.push({ nazwa, cena });
+    localStorage.setItem(produktyKey, JSON.stringify(produkty));
+    document.getElementById('nazwaProduktu').value = '';
+    document.getElementById('cenaProduktu').value = '';
+    pokazListeProduktow();
+  }
+
+  function pokazListeProduktow() {
+    const lista = document.getElementById('listaProduktow');
+    const produkty = JSON.parse(localStorage.getItem(produktyKey)) || [];
+    lista.innerHTML = '';
+    produkty.forEach(p => {
+      const li = document.createElement('li');
+      li.textContent = `${p.nazwa} - ${p.cena.toFixed(2)}zł`;
+      lista.appendChild(li);
+    });
+  }
+
+  function pokazCheckboxyProduktow() {
+    const produkty = JSON.parse(localStorage.getItem(produktyKey)) || [];
+    const container = document.getElementById('produktyCheckboxes');
+    container.innerHTML = '';
+    produkty.forEach((p, index) => {
+      const label = document.createElement('label');
+      label.innerHTML = `<input type="checkbox" value="${index}"> ${p.nazwa} - ${p.cena.toFixed(2)}zł`;
+      container.appendChild(label);
+    });
+  }
+
+  function zapiszSprzedaz() {
+    const dataInput = document.getElementById('dataSprzedazy');
+    const data = dataInput.value;
+    const checkboxy = document.querySelectorAll('#produktyCheckboxes input[type="checkbox"]:checked');
+    if (!data || checkboxy.length === 0) {
+      alert('Wybierz datę i produkty!');
+      return;
+    }
+
+    const produkty = JSON.parse(localStorage.getItem(produktyKey)) || [];
+    const sprzedaz = JSON.parse(localStorage.getItem(sprzedazKey)) || [];
+
+    let suma = 0;
+    const produktySprzedane = [];
+    checkboxy.forEach(cb => {
+      const produkt = produkty[parseInt(cb.value)];
+      produktySprzedane.push(produkt);
+      suma += produkt.cena;
+    });
+
+    sprzedaz.push({ data, produkty: produktySprzedane, suma });
+    localStorage.setItem(sprzedazKey, JSON.stringify(sprzedaz));
+    pokazSprzedaz();
+  }
+
+  function pokazSprzedaz() {
+    const dataFiltru = document.getElementById('filtrData')?.value || null;
+    const lista = document.getElementById('listaSprzedazy');
+    const sprzedaz = JSON.parse(localStorage.getItem(sprzedazKey)) || [];
+    lista.innerHTML = '';
+    let laczna = 0;
+    sprzedaz.forEach(s => {
+      if (dataFiltru && !s.data.startsWith(dataFiltru)) return;
+      const li = document.createElement('li');
+      const produktyText = s.produkty.map(p => `${p.nazwa} (${p.cena.toFixed(2)}zł)`).join(', ');
+      li.textContent = `${s.data}: ${produktyText} = ${s.suma.toFixed(2)}zł`;
+      lista.appendChild(li);
+      laczna += s.suma;
+    });
+    document.getElementById('lacznaKwota').textContent = laczna.toFixed(2);
+  }
+
+  function ustawDateIGodzine() {
+    const teraz = new Date();
+    const offset = teraz.getTimezoneOffset();
+    const lokalnaData = new Date(teraz.getTime() - offset * 60000);
+    document.getElementById("dataSprzedazy").value = lokalnaData.toISOString().slice(0,16);
+  }
+</script>
+
+</body>
+</html>
